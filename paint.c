@@ -20,37 +20,104 @@
 */
 
 #include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
 // Color ID
 #define ID_COLOR_BLACK  101
-#define ID_COLOR_RED    102
-#define ID_COLOR_GREEN  103
-#define ID_COLOR_BLUE   104
-#define ID_COLOR_YELLOW 105
-#define ID_COLOR_CYAN   106
-#define ID_COLOR_MAGENTA 107
-#define ID_COLOR_WHITE  108
-#define ID_COLOR_ORANGE   109
-#define ID_COLOR_PINK     110
-#define ID_COLOR_PURPLE   111
-#define ID_COLOR_BROWN    112
-#define ID_COLOR_LIME     113
-#define ID_COLOR_TURQUOISE 114
-#define ID_COLOR_GOLDENROD 115
-#define ID_COLOR_LAVENDER 116
-#define ID_COLOR_CORAL 117
-#define ID_COLOR_SEAGREEN 118
+#define ID_COLOR_RED  102
+#define ID_COLOR_GREEN 103
+#define ID_COLOR_BLUE 104
+
+// Custom Color ID
+#define ID_COLOR_LABEL 105
+#define ID_CUSTOM_RGB 106
+#define ID_CUSTOM_BUTTON_COLOR 107
 
 // Settings ID
 #define ID_GRID_TOGGLE  119
 #define ID_INCREASE_BRUSH 120
 #define ID_DECREASE_BRUSH 121
-#define ID_BRUSHSIZE_LABEL 122
 
 // Other
-#define ID_RESET 123
+#define ID_ERASER 123
+#define ID_RESET 124
+
+// Struct def
+
+struct ColorMapping {
+    int r;
+    int g;
+    int b;
+    const char* name;
+};
+
+// Color mapping
+
+const struct ColorMapping colorTable[] = {
+    {255, 0, 0, "Red"},
+    {0, 255, 0, "Green"},
+    {0, 0, 255, "Blue"},
+    {255, 255, 255, "White"},
+    {0, 0, 0, "Black"},
+    {255, 255, 0, "Yellow"},
+    {255, 165, 0, "Orange"},
+    {128, 0, 128, "Purple"},
+    {128, 128, 128, "Gray"},
+    {255, 0, 255, "Magenta"},
+    {0, 255, 255, "Cyan"},
+    {128, 0, 0, "Maroon"},
+    {128, 128, 0, "Olive"},
+    {0, 128, 0, "Green (Dark)"},
+    {0, 128, 128, "Teal"},
+    {0, 0, 128, "Navy"},
+    {255, 192, 203, "Pink"},
+    {255, 215, 0, "Gold"},
+    {218, 112, 214, "Orchid"},
+    {255, 105, 180, "Hot Pink"},
+    {0, 255, 127, "Spring Green"},
+    {255, 20, 147, "Deep Pink"},
+    {0, 250, 154, "Medium Spring Green"},
+    {255, 228, 196, "Bisque"},
+    {210, 105, 30, "Chocolate"},
+    {255, 127, 80, "Coral"},
+    {70, 130, 180, "Steel Blue"},
+    {0, 191, 255, "Deep Sky Blue"},
+    {60, 179, 113, "Medium Sea Green"},
+    {255, 250, 205, "Lemon Chiffon"},
+    {107, 142, 35, "Olive Drab"},
+    {255, 228, 181, "Moccasin"},
+    {255, 99, 71, "Tomato"},
+    {255, 239, 213, "Papaya Whip"},
+    {188, 143, 143, "Rosy Brown"},
+    {0, 128, 128, "Teal"},
+    {173, 255, 47, "Green Yellow"},
+    {240, 230, 140, "Khaki"},
+    {255, 20, 147, "Deep Pink"},
+    {0, 255, 127, "Spring Green"},
+    {255, 0, 255, "Magenta"},
+    {0, 255, 255, "Cyan"},
+    {255, 215, 0, "Gold"},
+    {218, 112, 214, "Orchid"},
+    {255, 105, 180, "Hot Pink"},
+    {0, 250, 154, "Medium Spring Green"},
+    {255, 228, 196, "Bisque"},
+    {210, 105, 30, "Chocolate"},
+    {255, 127, 80, "Coral"},
+    {70, 130, 180, "Steel Blue"},
+    {0, 191, 255, "Deep Sky Blue"},
+    {60, 179, 113, "Medium Sea Green"},
+    {255, 250, 205, "Lemon Chiffon"},
+    {107, 142, 35, "Olive Drab"},
+    {255, 228, 181, "Moccasin"},
+    {255, 99, 71, "Tomato"},
+    {255, 239, 213, "Papaya Whip"},
+    {188, 143, 143, "Rosy Brown"},
+};
 
 // Prototype
 
@@ -77,15 +144,20 @@ void ToggleGrid();
 /**
  * @brief Writes a message to the debug log file.
  *
- * @param message The message to be written to the log.
+ * @param format The message to be written to the log.
  */
-void LogToFile(const char* message);
+void LogToFile(const char* format, ...);
 /**
  * @brief Resets the canvas of the specified window.
  *
  * @param hwnd The handle to the window.
  */
 void ResetCanvas(HWND hwnd);
+
+const char* GetClosestColorName(int r, int g, int b);
+void UpdateStatusBarText();
+const char* GetCurrentModeText();
+void resetColorTextField();
 
 /**
  * @brief Window procedure that handles messages for the main window.
@@ -96,14 +168,25 @@ void ResetCanvas(HWND hwnd);
  * @param lParam Additional message information.
  * @return The result of the message processing and depends on the message.
  */
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Global variables
 
 HWND hwnd;
 HBRUSH colorBrush; // Default color is black
+int currentColor[3] = {0,0,0};
+HWND hStatusBar;
+HCURSOR hCustomCursor;
 BOOL useGrid = FALSE;
+BOOL eraseMode = FALSE;
 int brushSize = 1;
+
+BOOL useCustomColor = FALSE;
+int CustomColor[3] = {0,0,0}; // Default custom color is black
+
+int mouseX = 0;
+int mouseY = 0;
 
 /**
  * @brief The main entry point for the application.
@@ -131,7 +214,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     hwnd = CreateWindowEx(
         0,
         TEXT("PaintWindowClass"),
-        TEXT("Paint Program | By William Beaudin | Version: 2024-02-03/2.2"),
+        TEXT("Paint Program | By William Beaudin | Version: 2024-02-04/2.3"),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
         NULL,
@@ -155,25 +238,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CreateWindow(TEXT("BUTTON"), TEXT("Red"), WS_VISIBLE | WS_CHILD, 10, 50, 80, 30, hwnd, (HMENU)ID_COLOR_RED, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Green"), WS_VISIBLE | WS_CHILD, 10, 90, 80, 30, hwnd, (HMENU)ID_COLOR_GREEN, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Blue"), WS_VISIBLE | WS_CHILD, 10, 130, 80, 30, hwnd, (HMENU)ID_COLOR_BLUE, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Yellow"), WS_VISIBLE | WS_CHILD, 10, 170, 80, 30, hwnd, (HMENU)ID_COLOR_YELLOW, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Cyan"), WS_VISIBLE | WS_CHILD, 10, 210, 80, 30, hwnd, (HMENU)ID_COLOR_CYAN, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Magenta"), WS_VISIBLE | WS_CHILD, 10, 250, 80, 30, hwnd, (HMENU)ID_COLOR_MAGENTA, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Orange"), WS_VISIBLE | WS_CHILD, 10, 290, 80, 30, hwnd, (HMENU)ID_COLOR_ORANGE, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Pink"), WS_VISIBLE | WS_CHILD, 10, 330, 80, 30, hwnd, (HMENU)ID_COLOR_PINK, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Purple"), WS_VISIBLE | WS_CHILD, 10, 370, 80, 30, hwnd, (HMENU)ID_COLOR_PURPLE, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Brown"), WS_VISIBLE | WS_CHILD, 10, 410, 80, 30, hwnd, (HMENU)ID_COLOR_BROWN, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Lime"), WS_VISIBLE | WS_CHILD, 10, 450, 80, 30, hwnd, (HMENU)ID_COLOR_LIME, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Turquoise"), WS_VISIBLE | WS_CHILD, 10, 490, 80, 30, hwnd, (HMENU)ID_COLOR_TURQUOISE, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Goldenrod"), WS_VISIBLE | WS_CHILD, 10, 530, 80, 30, hwnd, (HMENU)ID_COLOR_GOLDENROD, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Lavender"), WS_VISIBLE | WS_CHILD, 10, 570, 80, 30, hwnd, (HMENU)ID_COLOR_LAVENDER, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Coral"), WS_VISIBLE | WS_CHILD, 10, 610, 80, 30, hwnd, (HMENU)ID_COLOR_CORAL, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Seagreen"), WS_VISIBLE | WS_CHILD, 10, 650, 80, 30, hwnd, (HMENU)ID_COLOR_SEAGREEN, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("ERASER"), WS_VISIBLE | WS_CHILD, 100, 10, 80, 30, hwnd, (HMENU)ID_COLOR_WHITE, hInstance, NULL);
+    CreateWindow(TEXT("STATIC"), TEXT("Custom RGB Value"), WS_VISIBLE | WS_CHILD | SS_CENTER, 10, 170, 130, 20, hwnd, (HMENU) ID_CUSTOM_RGB, hInstance, NULL);
+    HWND hEdit = CreateWindowEx(0, TEXT("EDIT"), TEXT(""), WS_CHILD | WS_VISIBLE | WS_BORDER | SS_CENTER, 10, 200, 100, 20, hwnd, (HMENU)ID_COLOR_LABEL, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("CUSTOM COLOR"), WS_VISIBLE | WS_CHILD, 10, 230, 120, 30, hwnd, (HMENU)ID_CUSTOM_BUTTON_COLOR, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("Eraser"), WS_VISIBLE | WS_CHILD, 100, 10, 80, 30, hwnd, (HMENU)ID_ERASER, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Toggle Grid"), WS_VISIBLE | WS_CHILD, 190, 10, 100, 30, hwnd, (HMENU)ID_GRID_TOGGLE, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Brush+"), WS_VISIBLE | WS_CHILD, 300, 10, 80, 30, hwnd, (HMENU)ID_INCREASE_BRUSH, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Brush-"), WS_VISIBLE | WS_CHILD, 390, 10, 80, 30, hwnd, (HMENU)ID_DECREASE_BRUSH, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Reset"), WS_VISIBLE | WS_CHILD | SS_CENTER, 480, 10, 80, 30, hwnd, (HMENU) ID_RESET, hInstance, NULL);
-    CreateWindow(TEXT("STATIC"), TEXT("Brush Size: 1"), WS_VISIBLE | WS_CHILD | SS_CENTER, 570, 15, 100, 20, hwnd, (HMENU) ID_BRUSHSIZE_LABEL, hInstance, NULL);
+
+    hStatusBar = CreateWindowEx(
+        0,
+        STATUSCLASSNAME,
+        NULL, 
+        WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP,
+        0,0,0,0,
+        hwnd, 
+        NULL,
+        hInstance,
+        NULL
+    );
+
+    int parts[] = {80, 230, 350, 520, -1};
+    SendMessage(hStatusBar, SB_SETPARTS, sizeof(parts) / sizeof(parts[0]), (LPARAM)parts);
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
@@ -186,11 +273,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     DeleteObject(colorBrush);
     DestroyIcon(hIcon);
+    DestroyCursor(hCustomCursor);
     return msg.wParam;
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     static POINT prevPoint;
+
+    // Load the default cross cursor
+    hCustomCursor = LoadCursor(NULL, IDC_CROSS);
+    if (hCustomCursor == NULL) {
+        DWORD error = GetLastError();
+        LogToFile("ERROR: Failed to load cursor. Error code: %lu\n", error);
+    }
+
+    // Set the cursor to the default cross cursor
+    SetCursor(hCustomCursor);
 
     switch (uMsg) {
     case WM_LBUTTONDOWN:
@@ -204,6 +302,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
 
     case WM_MOUSEMOVE:
+        mouseX = GET_X_LPARAM(lParam);
+        mouseY = GET_Y_LPARAM(lParam);
+
         if (wParam & MK_LBUTTON) {
             POINT currentPoint;
             currentPoint.x = LOWORD(lParam);
@@ -214,61 +315,61 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
 
     case WM_COMMAND:
+
+        if (LOWORD(wParam) == ID_COLOR_LABEL && HIWORD(wParam) == EN_CHANGE) {
+            char buffer[12];
+            GetWindowText(GetDlgItem(hwnd, ID_COLOR_LABEL), buffer, sizeof(buffer));
+            int r,g,b;
+            if (sscanf(buffer, "%d,%d,%d", &r, &g, &b) == 3) {
+                CustomColor[0] = r;
+                CustomColor[1] = g;
+                CustomColor[2] = b;
+
+                if (useCustomColor) {
+                    SetColor(CustomColor[0],CustomColor[1],CustomColor[2]);
+                    const char* closestColorName = GetClosestColorName(CustomColor[0], CustomColor[1], CustomColor[2]);
+                    SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), closestColorName);
+                } else {
+                    SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), "CUSTOM COLOR");
+                }
+                LogToFile("DEBUG: New RGB Value: %d, %d, %d\n", r,g,b);
+            }
+            LogToFile("DEBUG: Text value changed: %s\n", buffer);
+        }
+
         // button clicks to update buttons and settings
         switch (LOWORD(wParam)) {
             case ID_COLOR_BLACK:
                 SetColor(0, 0, 0);
+                useCustomColor = FALSE;
+                resetColorTextField();
                 break;
             case ID_COLOR_RED:
                 SetColor(255, 0, 0);
+                useCustomColor = FALSE;
+                resetColorTextField();
                 break;
             case ID_COLOR_GREEN:
                 SetColor(0, 255, 0);
+                useCustomColor = FALSE;
+                resetColorTextField();
                 break;
             case ID_COLOR_BLUE:
                 SetColor(0, 0, 255);
+                useCustomColor = FALSE;
+                resetColorTextField();
                 break;
-            case ID_COLOR_YELLOW:
-                SetColor(255, 255, 0);
+            case ID_CUSTOM_BUTTON_COLOR:
+                useCustomColor = !useCustomColor;
+                LogToFile("DEBUG: State of the custom button: %d\n", (useCustomColor == TRUE) ? 1 : 0);
                 break;
-            case ID_COLOR_CYAN:
-                SetColor(0, 255, 255);
-                break;
-            case ID_COLOR_MAGENTA:
-                SetColor(255, 0, 255);
-                break;
-            case ID_COLOR_ORANGE:
-                SetColor(255, 165, 0);
-                break;
-            case ID_COLOR_PINK:
-                SetColor(255, 192, 203);
-                break;
-            case ID_COLOR_PURPLE:
-                SetColor(128, 0, 128);
-                break;
-            case ID_COLOR_BROWN:
-                SetColor(139, 69, 19);
-                break;
-            case ID_COLOR_LIME:
-                SetColor(0, 255, 0);
-                break;
-            case ID_COLOR_TURQUOISE:
-                SetColor(64, 224, 208);
-                break;
-            case ID_COLOR_GOLDENROD:
-                SetColor(218, 165, 32);
-                break;
-            case ID_COLOR_LAVENDER:
-                SetColor(230, 230, 250);
-                break;
-            case ID_COLOR_CORAL:
-                SetColor(255, 127, 80);
-                break;
-            case ID_COLOR_SEAGREEN:
-                SetColor(46, 139, 87);
-                break;
-            case ID_COLOR_WHITE:
-                SetColor(255, 255, 255);
+            case ID_ERASER:
+                eraseMode = !eraseMode;
+                if (eraseMode) {
+                    SetColor(255, 255, 255);
+                } else {
+                    SetColor(currentColor[0], currentColor[1], currentColor[2]);
+                }
                 break;
             case ID_GRID_TOGGLE:
                 ToggleGrid();
@@ -306,7 +407,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     char buffer[50];
     wsprintf(buffer, TEXT("Brush Size: %d"), brushSize);
-    SetWindowText(GetDlgItem(hwnd, ID_BRUSHSIZE_LABEL), buffer);
+    UpdateStatusBarText();
     return 0;
 }
 
@@ -330,6 +431,12 @@ void DrawPixel(HWND hwnd, int x, int y) {
     LOGBRUSH lb;
     GetObject(colorBrush, sizeof(LOGBRUSH), &lb);
 
+    if (!eraseMode) {
+        currentColor[0] = GetRValue(lb.lbColor);
+        currentColor[1] = GetGValue(lb.lbColor);
+        currentColor[2] = GetBValue(lb.lbColor);
+    }
+
     int halfSize = brushSize / 2;
 
     for (int i = -halfSize; i <= halfSize; ++i) {
@@ -350,10 +457,60 @@ void ToggleGrid() {
     useGrid = !useGrid;
 }
 
-void LogToFile(const char* message) {
+void resetColorTextField() {
+    SetWindowText(GetDlgItem(hwnd, ID_COLOR_LABEL), "");
+    SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), "CUSTOM COLOR");
+}
+
+const char* GetClosestColorName(int r, int g, int b) {
+    const struct ColorMapping* closestMatch = NULL;
+    double minDistance = 1.79769e+308; // Maximum representable finite floating-point value
+
+    for (const struct ColorMapping* mapping = colorTable; mapping < colorTable + sizeof(colorTable) / sizeof(colorTable[0]); ++mapping) {
+        double distance = sqrt(pow(mapping-> r - r, 2) + pow(mapping-> g - g, 2) + pow(mapping-> b - b, 2));
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestMatch = mapping;
+        }
+    }
+
+    return (closestMatch != NULL) ? closestMatch-> name : colorTable[0].name; // Returning the first color as a fallback
+}
+
+void UpdateStatusBarText() {
+    char brushSizeText[256];
+    char colorRGBValueText[256];
+    char currentModeText[256];
+    char currentMousePositionText[256];
+    sprintf_s(brushSizeText, sizeof(brushSizeText), "Brush Size: %d", brushSize);
+    sprintf_s(colorRGBValueText, sizeof(colorRGBValueText), "Color: RGB(%d, %d, %d)", currentColor[0], currentColor[1], currentColor[2]);
+    sprintf_s(currentModeText, sizeof(currentModeText), "Current Mode: %s", GetCurrentModeText());
+    sprintf_s(currentMousePositionText, sizeof(currentMousePositionText), "Mouse Pos = X: %d, Y: %d", mouseX, mouseY);
+
+    SendMessage(hStatusBar, SB_SETTEXT, 0, (LPARAM)brushSizeText);
+    SendMessage(hStatusBar, SB_SETTEXT, 1, (LPARAM)colorRGBValueText);
+    SendMessage(hStatusBar, SB_SETTEXT, 2, (LPARAM)currentModeText);
+    SendMessage(hStatusBar, SB_SETTEXT, 3, (LPARAM)currentMousePositionText);
+}
+
+const char* GetCurrentModeText() {
+    if (eraseMode) {
+        return "ERASE";
+    } else if (useGrid) {
+        return "GRID";
+    } else {
+        return "FREE";
+    }
+}
+
+void LogToFile(const char* format, ...) {
     FILE* file = fopen("logfile.txt", "a");
     if (file != NULL) {
-        fprintf(file, "DEBUG: %s\n", message);
+        va_list args;
+        va_start(args, format);
+        vfprintf(file, format, args);
+        va_end(args);
         fclose(file);
     }
 }
