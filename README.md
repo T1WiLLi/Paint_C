@@ -62,20 +62,7 @@ The Paint Program offers a variety of colors for your drawing needs. Choose from
 - **Red**
 - **Green**
 - **Blue**
-- **Yellow**
-- **Cyan**
-- **Magenta**
-- **White**
-- **Orange**
-- **Pink**
-- **Purple**
-- **Brown**
-- **Lime**
-- **Turquoise**
-- **Goldenrod**
-- **Lavender**
-- **Coral**
-- **Seagreen**
+- **As Well as a RGB Selector**
    
 #### Eraser functionality
 
