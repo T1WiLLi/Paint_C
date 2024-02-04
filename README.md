@@ -54,11 +54,36 @@ The program utilizes the Windows API and Common Controls Library to create a gra
 
 ## Features
 
-- Color selection (Black, Red, Green, Blue, Yellow, Cyan, Magenta, White)
-- Eraser functionality
-- Grid toggle option
-- Adjustable brush size
-- Canvas reset option
+### Color Selection
+
+The Paint Program offers a variety of colors for your drawing needs. Choose from the following color options:
+
+- **Black**
+- **Red**
+- **Green**
+- **Blue**
+- **Yellow**
+- **Cyan**
+- **Magenta**
+- **White**
+- **Orange**
+- **Pink**
+- **Purple**
+- **Brown**
+- **Lime**
+- **Turquoise**
+- **Goldenrod**
+- **Lavender**
+- **Coral**
+- **Seagreen**
+   
+#### Eraser functionality
+
+#### Grid toggle option
+
+#### Adjustable brush size
+
+#### Canvas reset option
 
 ## Scalability
 
