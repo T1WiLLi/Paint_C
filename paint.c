@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <tchar.h>
 
 // Color ID
 #define ID_COLOR_BLACK  101
@@ -40,12 +41,17 @@
 
 // Settings ID
 #define ID_GRID_TOGGLE  119
-#define ID_INCREASE_BRUSH 120
-#define ID_DECREASE_BRUSH 121
+#define ID_BRUSH_SLIDER 120
+#define MIN_BRUSH_SIZE 1
+#define MAX_BRUSH_SIZE 26
+
+
+// Drawing-mode
+#define ID_ERASER 122
+#define ID_LINE 123
 
 // Other
-#define ID_ERASER 123
-#define ID_RESET 124
+#define ID_RESET 130
 
 // Struct def
 
@@ -138,10 +144,6 @@ void DrawPixel(HWND hwnd, int x, int y);
  */
 void SetColor(int r, int g, int b);
 /**
- * @brief Toggles the grid feature on or off.
- */
-void ToggleGrid();
-/**
  * @brief Writes a message to the debug log file.
  *
  * @param format The message to be written to the log.
@@ -158,6 +160,7 @@ const char* GetClosestColorName(int r, int g, int b);
 void UpdateStatusBarText();
 const char* GetCurrentModeText();
 void resetColorTextField();
+void DrawCustomLine(HWND hwnd, int startX, int startY, int endX, int endY);
 
 /**
  * @brief Window procedure that handles messages for the main window.
@@ -175,11 +178,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 HWND hwnd;
 HBRUSH colorBrush; // Default color is black
+HWND hBrushSlider;
 int currentColor[3] = {0,0,0};
 HWND hStatusBar;
 HCURSOR hCustomCursor;
 BOOL useGrid = FALSE;
 BOOL eraseMode = FALSE;
+BOOL lineMode = FALSE;
 int brushSize = 1;
 
 BOOL useCustomColor = FALSE;
@@ -243,9 +248,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CreateWindow(TEXT("BUTTON"), TEXT("CUSTOM COLOR"), WS_VISIBLE | WS_CHILD, 10, 230, 120, 30, hwnd, (HMENU)ID_CUSTOM_BUTTON_COLOR, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Eraser"), WS_VISIBLE | WS_CHILD, 100, 10, 80, 30, hwnd, (HMENU)ID_ERASER, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Toggle Grid"), WS_VISIBLE | WS_CHILD, 190, 10, 100, 30, hwnd, (HMENU)ID_GRID_TOGGLE, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Brush+"), WS_VISIBLE | WS_CHILD, 300, 10, 80, 30, hwnd, (HMENU)ID_INCREASE_BRUSH, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Brush-"), WS_VISIBLE | WS_CHILD, 390, 10, 80, 30, hwnd, (HMENU)ID_DECREASE_BRUSH, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("Reset"), WS_VISIBLE | WS_CHILD | SS_CENTER, 480, 10, 80, 30, hwnd, (HMENU) ID_RESET, hInstance, NULL);
+    hBrushSlider = CreateWindow(TRACKBAR_CLASS, NULL, WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS, 300, 10, 200, 30, hwnd, (HMENU)ID_BRUSH_SLIDER, hInstance, NULL);
+    SendMessage(hBrushSlider, TBM_SETRANGE, TRUE, MAKELPARAM(MIN_BRUSH_SIZE, MAX_BRUSH_SIZE));
+    SendMessage(hBrushSlider, TBM_SETPOS, TRUE, brushSize);
+    CreateWindow(TEXT("BUTTON"), TEXT("Reset"), WS_VISIBLE | WS_CHILD | SS_CENTER, 510, 10, 80, 30, hwnd, (HMENU) ID_RESET, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("Line-Mode"), WS_VISIBLE | WS_CHILD | SS_CENTER, 600, 10, 80, 30, hwnd, (HMENU) ID_LINE, hInstance, NULL);
 
     hStatusBar = CreateWindowEx(
         0,
@@ -278,6 +285,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    static POINT startPoint;
     static POINT prevPoint;
 
     // Load the default cross cursor
@@ -292,20 +300,30 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     switch (uMsg) {
     case WM_LBUTTONDOWN:
-        prevPoint.x = LOWORD(lParam);
-        prevPoint.y = HIWORD(lParam);
-        DrawPixel(hwnd, prevPoint.x, prevPoint.y);
+        if (lineMode) {
+            startPoint.x = LOWORD(lParam);
+            startPoint.y = HIWORD(lParam);
+        } else {
+            prevPoint.x = LOWORD(lParam);
+            prevPoint.y = HIWORD(lParam);
+            DrawPixel(hwnd, prevPoint.x, prevPoint.y);
+        }
         break;
 
     case WM_LBUTTONUP:
-        // Do nothing on button release
+        if (lineMode) {
+            POINT endPoint;
+            endPoint.x = LOWORD(lParam);
+            endPoint.y = HIWORD(lParam);
+            DrawCustomLine(hwnd, startPoint.x, startPoint.y, endPoint.x, endPoint.y);
+        }
         break;
 
     case WM_MOUSEMOVE:
         mouseX = GET_X_LPARAM(lParam);
         mouseY = GET_Y_LPARAM(lParam);
 
-        if (wParam & MK_LBUTTON) {
+        if (wParam & MK_LBUTTON && !lineMode) {
             POINT currentPoint;
             currentPoint.x = LOWORD(lParam);
             currentPoint.y = HIWORD(lParam);
@@ -313,7 +331,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             prevPoint = currentPoint;
         }
         break;
+    case WM_HSCROLL:
+        if ((HWND)lParam == hBrushSlider) {
+            int newPosition = SendMessage(hBrushSlider, TBM_GETPOS, 0, 0);
+            int roundedPosition = (newPosition / 2) * 2; // Round to the nearest multiple of 2
 
+            if (roundedPosition != brushSize) {
+                brushSize = roundedPosition;
+                SendMessage(hBrushSlider, TBM_SETPOS, TRUE, brushSize);
+            }
+        }
+        break;
     case WM_COMMAND:
 
         if (LOWORD(wParam) == ID_COLOR_LABEL && HIWORD(wParam) == EN_CHANGE) {
@@ -366,31 +394,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             case ID_ERASER:
                 eraseMode = !eraseMode;
                 if (eraseMode) {
+                    lineMode = FALSE;
                     SetColor(255, 255, 255);
                 } else {
                     SetColor(currentColor[0], currentColor[1], currentColor[2]);
                 }
                 break;
             case ID_GRID_TOGGLE:
-                ToggleGrid();
+                useGrid = !useGrid;
+                PlaySound(_T("./click.wav"), NULL, SND_FILENAME | SND_ASYNC);
                 break;
-            case ID_INCREASE_BRUSH:
-                if (brushSize != 26) {
-                    if (brushSize == 1) {
-                        brushSize++;
-                    } else {
-                        brushSize += 2;
-                    }
-                }
-                break;
-            case ID_DECREASE_BRUSH:
-                if(brushSize != 1) {
-                    if (brushSize == 2) {
-                        brushSize--;
-                    } else {
-                        brushSize -= 2;
-                    }
-                }
+            case ID_LINE: 
+                lineMode = !lineMode;
                 break;
             case ID_RESET:
                 ResetCanvas(hwnd);
@@ -448,13 +463,53 @@ void DrawPixel(HWND hwnd, int x, int y) {
     ReleaseDC(hwnd, hdc);
 }
 
+void DrawCustomLine(HWND hwnd, int startX, int startY, int endX, int endY) {
+    HDC hdc = GetDC(hwnd);
+
+    if (useGrid) {
+        int gridSize = brushSize;
+        startX = ((startX + gridSize / 2) / gridSize) * gridSize;
+        startY = ((startY + gridSize / 2) / gridSize) * gridSize;
+        endX = ((endX + gridSize / 2) / gridSize) * gridSize;
+        endY = ((endY + gridSize / 2) / gridSize) * gridSize;
+    }
+
+    int halfSize = brushSize / 2;
+
+    for (int i = -halfSize; i <= halfSize; ++i) {
+        for (int j = -halfSize; j <= halfSize; ++j) {
+            int rectStartX = startX + i;
+            int rectStartY = startY + j;
+            int rectEndX = endX + i;
+            int rectEndY = endY + j;
+
+            LOGBRUSH lb;
+            GetObject(colorBrush, sizeof(LOGBRUSH), &lb);
+            
+            if (!eraseMode) {
+                currentColor[0] = GetRValue(lb.lbColor);
+                currentColor[1] = GetGValue(lb.lbColor);
+                currentColor[2] = GetBValue(lb.lbColor);
+            }
+
+            // Draw small rectangles between the starting and ending points with currentColor
+            HPEN hPen = CreatePen(PS_SOLID, 1, RGB(currentColor[0], currentColor[1], currentColor[2]));
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+            MoveToEx(hdc, rectStartX, rectStartY, NULL);
+            LineTo(hdc, rectEndX, rectEndY);
+
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hPen);
+        }
+    }
+
+    ReleaseDC(hwnd, hdc);
+}
+
 void SetColor(int r, int g, int b) {
     DeleteObject(colorBrush);
     colorBrush = CreateSolidBrush(RGB(r, g, b));
-}
-
-void ToggleGrid() {
-    useGrid = !useGrid;
 }
 
 void resetColorTextField() {
@@ -499,6 +554,8 @@ const char* GetCurrentModeText() {
         return "ERASE";
     } else if (useGrid) {
         return "GRID";
+    } else if (lineMode) {
+        return "LINE";
     } else {
         return "FREE";
     }
