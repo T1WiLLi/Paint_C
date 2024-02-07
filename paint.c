@@ -27,6 +27,7 @@
 #include <string.h>
 #include <math.h>
 #include <tchar.h>
+#include <wingdi.h>
 
 // Color ID
 #define ID_COLOR_BLACK  101
@@ -52,6 +53,10 @@
 
 // Other
 #define ID_RESET 130
+#define ID_SAVE_BUTTON 131
+#define ID_LOAD_BUTTON 132
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
 // Struct def
 
@@ -161,6 +166,8 @@ void UpdateStatusBarText();
 const char* GetCurrentModeText();
 void resetColorTextField();
 void DrawCustomLine(HWND hwnd, int startX, int startY, int endX, int endY);
+void capture_pixel_data(FILE *file);
+void load_pixel_data(FILE *file);
 
 /**
  * @brief Window procedure that handles messages for the main window.
@@ -186,6 +193,7 @@ BOOL useGrid = FALSE;
 BOOL eraseMode = FALSE;
 BOOL lineMode = FALSE;
 int brushSize = 1;
+FILE *file;
 
 BOOL useCustomColor = FALSE;
 int CustomColor[3] = {0,0,0}; // Default custom color is black
@@ -219,7 +227,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     hwnd = CreateWindowEx(
         0,
         TEXT("PaintWindowClass"),
-        TEXT("Paint Program | By William Beaudin | Version: 2024-02-04/2.3"),
+        TEXT("Paint Program | By William Beaudin | Version: 2024-02-07/3.2"),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
         NULL,
@@ -253,6 +261,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     SendMessage(hBrushSlider, TBM_SETPOS, TRUE, brushSize);
     CreateWindow(TEXT("BUTTON"), TEXT("Reset"), WS_VISIBLE | WS_CHILD | SS_CENTER, 510, 10, 80, 30, hwnd, (HMENU) ID_RESET, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Line-Mode"), WS_VISIBLE | WS_CHILD | SS_CENTER, 600, 10, 80, 30, hwnd, (HMENU) ID_LINE, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("SAVE"), WS_VISIBLE | WS_CHILD | SS_CENTER, 690, 10, 80, 30, hwnd, (HMENU) ID_SAVE_BUTTON, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("LOAD"), WS_VISIBLE | WS_CHILD | SS_CENTER, 780, 10, 80, 30, hwnd, (HMENU) ID_LOAD_BUTTON, hInstance, NULL);
 
     hStatusBar = CreateWindowEx(
         0,
@@ -353,13 +363,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 CustomColor[1] = g;
                 CustomColor[2] = b;
 
-                if (useCustomColor) {
-                    SetColor(CustomColor[0],CustomColor[1],CustomColor[2]);
-                    const char* closestColorName = GetClosestColorName(CustomColor[0], CustomColor[1], CustomColor[2]);
-                    SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), closestColorName);
-                } else {
-                    SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), "CUSTOM COLOR");
-                }
+                const char* closestColorName = GetClosestColorName(CustomColor[0], CustomColor[1], CustomColor[2]);
+                SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), closestColorName);
                 LogToFile("DEBUG: New RGB Value: %d, %d, %d\n", r,g,b);
             }
             LogToFile("DEBUG: Text value changed: %s\n", buffer);
@@ -389,8 +394,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 break;
             case ID_CUSTOM_BUTTON_COLOR:
                 useCustomColor = !useCustomColor;
+                if (useCustomColor) {
+                    SetColor(CustomColor[0],CustomColor[1],CustomColor[2]);
+                }
                 LogToFile("DEBUG: State of the custom button: %d\n", (useCustomColor == TRUE) ? 1 : 0);
                 break;
+                case ID_SAVE_BUTTON:
+                    MessageBox(NULL, "SAVING... Please wait.", "Alert", MB_OK | MB_ICONINFORMATION);
+                    LogToFile("DEBUG: SAVING...\n");
+                    file = fopen("pixel_data.csv", "w"); 
+                    if (file == NULL) {
+                        LogToFile("ERROR: Failed to open file for writing.\n");
+                        break;
+                    }
+                    capture_pixel_data(file);
+                    fclose(file);
+                    LogToFile("DEBUG: SAVING DONE.\n");
+                    break;
+                case ID_LOAD_BUTTON:
+                    LogToFile("DEBUG: CURRENT_LOADING\n");
+                    file = fopen("pixel_data.csv", "r");
+                    if (file == NULL) {
+                        LogToFile("ERROR: Failed to open file for reading.\n");
+                        break;
+                    }
+                    load_pixel_data(file);
+                    fclose(file);
+                    LogToFile("DEBUG: LOADING FINISHED\n");
+                    break;
             case ID_ERASER:
                 eraseMode = !eraseMode;
                 if (eraseMode) {
@@ -561,13 +592,98 @@ const char* GetCurrentModeText() {
     }
 }
 
+void capture_pixel_data(FILE *file) {
+    HDC hdc = GetDC(hwnd); // Get device context of the window
+    if (hdc == NULL) {
+        return;
+    }
+
+    RECT rect;
+    GetClientRect(hwnd, &rect); // Get the dimensions of the window client area
+
+    // Create a memory device context and a compatible bitmap
+    HDC memDC = CreateCompatibleDC(hdc);
+    if (memDC == NULL) {
+        ReleaseDC(hwnd, hdc);
+        return;
+    }
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rect.right - rect.left, rect.bottom - rect.top);
+    if (hBitmap == NULL) {
+        DeleteDC(memDC);
+        ReleaseDC(hwnd, hdc);
+        return;
+    }
+    HGDIOBJ hOldBitmap = SelectObject(memDC, hBitmap);
+
+    // Copy the window pixels to the memory device context
+    if (!BitBlt(memDC, 0, 0, rect.right - rect.left, rect.bottom - rect.top, hdc, 0, 0, SRCCOPY)) {
+        SelectObject(memDC, hOldBitmap);
+        DeleteObject(hBitmap);
+        DeleteDC(memDC);
+        ReleaseDC(hwnd, hdc);
+        return;
+    }
+
+    // Process pixel data
+    for (int y = 0; y < rect.bottom - rect.top; y++) {
+        for (int x = 0; x < rect.right - rect.left; x++) {
+            // Get the color of the pixel at (x, y)
+            COLORREF color = GetPixel(memDC, x, y);
+            if (color == CLR_INVALID) {
+                continue; // Skip invalid pixels
+            }
+            
+            // Extract RGB values from the color
+            BYTE blue = GetBValue(color);
+            BYTE green = GetGValue(color);
+            BYTE red = GetRValue(color);
+
+            // Write pixel information to the file
+            fprintf(file, "%d,%d,%d,%d,%d\n", x, y, red, green, blue);
+        }
+    }
+
+    // Clean up resources
+    SelectObject(memDC, hOldBitmap);
+    DeleteObject(hBitmap);
+    DeleteDC(memDC);
+    ReleaseDC(hwnd, hdc);
+}
+
+
+void load_pixel_data(FILE *file) {
+    LogToFile("DEBUG: INIT LOADING...\n");
+    rewind(file);
+
+    HDC hdc = GetDC(hwnd); // Get device context of the window
+    if (hdc == NULL) {
+        return;
+    }
+
+    size_t buffer_size = 64;
+    char *buffer = malloc(buffer_size * sizeof(char));
+
+    while(fgets(buffer, buffer_size, file) != NULL) {
+        int x, y, r, g, b;
+        if (sscanf(buffer, "%d,%d,%d,%d,%d", &x, &y, &r, &g, &b) == 5) {
+            if (r != 255 && g != 255 && b != 255) {
+                SetPixel(hdc, x, y, RGB(r,b,g));
+            }
+        }
+    }
+
+    // Release device context
+    free(buffer);
+    ReleaseDC(hwnd, hdc);
+}
+
 void LogToFile(const char* format, ...) {
-    FILE* file = fopen("logfile.txt", "a");
-    if (file != NULL) {
+    FILE* debugFile = fopen("logfile.txt", "a");
+    if (debugFile != NULL) {
         va_list args;
         va_start(args, format);
-        vfprintf(file, format, args);
+        vfprintf(debugFile, format, args);
         va_end(args);
-        fclose(file);
+        fclose(debugFile);
     }
 }
