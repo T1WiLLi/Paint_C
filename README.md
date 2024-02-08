@@ -20,7 +20,7 @@ If you prefer to compile the source code yourself, follow these steps:
 4. Run the following command:
 
    ```bash
-   gcc -o paint.exe paint.c -mwindows -lgdi32
+    gcc -o paint.exe paint.c -mwindows -lgdi32 -lwinmm -lcomctl32
    ```
 **Note:** This compilation method is suitable for users with the GCC compiler installed locally.
 
