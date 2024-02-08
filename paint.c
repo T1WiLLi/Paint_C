@@ -58,77 +58,25 @@
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 
+// Progress bar
+
+#define IDD_PROGRESS_DIALOG 133
+#define IDC_PROGRESS_BAR 134
+#define IDC_PROGRESS_TEXT 135
+
 // Struct def
 
-struct ColorMapping {
+typedef struct ColorMapping {
     int r;
     int g;
     int b;
     const char* name;
-};
+} ColorMapping;
 
 // Color mapping
 
-const struct ColorMapping colorTable[] = {
-    {255, 0, 0, "Red"},
-    {0, 255, 0, "Green"},
-    {0, 0, 255, "Blue"},
-    {255, 255, 255, "White"},
-    {0, 0, 0, "Black"},
-    {255, 255, 0, "Yellow"},
-    {255, 165, 0, "Orange"},
-    {128, 0, 128, "Purple"},
-    {128, 128, 128, "Gray"},
-    {255, 0, 255, "Magenta"},
-    {0, 255, 255, "Cyan"},
-    {128, 0, 0, "Maroon"},
-    {128, 128, 0, "Olive"},
-    {0, 128, 0, "Green (Dark)"},
-    {0, 128, 128, "Teal"},
-    {0, 0, 128, "Navy"},
-    {255, 192, 203, "Pink"},
-    {255, 215, 0, "Gold"},
-    {218, 112, 214, "Orchid"},
-    {255, 105, 180, "Hot Pink"},
-    {0, 255, 127, "Spring Green"},
-    {255, 20, 147, "Deep Pink"},
-    {0, 250, 154, "Medium Spring Green"},
-    {255, 228, 196, "Bisque"},
-    {210, 105, 30, "Chocolate"},
-    {255, 127, 80, "Coral"},
-    {70, 130, 180, "Steel Blue"},
-    {0, 191, 255, "Deep Sky Blue"},
-    {60, 179, 113, "Medium Sea Green"},
-    {255, 250, 205, "Lemon Chiffon"},
-    {107, 142, 35, "Olive Drab"},
-    {255, 228, 181, "Moccasin"},
-    {255, 99, 71, "Tomato"},
-    {255, 239, 213, "Papaya Whip"},
-    {188, 143, 143, "Rosy Brown"},
-    {0, 128, 128, "Teal"},
-    {173, 255, 47, "Green Yellow"},
-    {240, 230, 140, "Khaki"},
-    {255, 20, 147, "Deep Pink"},
-    {0, 255, 127, "Spring Green"},
-    {255, 0, 255, "Magenta"},
-    {0, 255, 255, "Cyan"},
-    {255, 215, 0, "Gold"},
-    {218, 112, 214, "Orchid"},
-    {255, 105, 180, "Hot Pink"},
-    {0, 250, 154, "Medium Spring Green"},
-    {255, 228, 196, "Bisque"},
-    {210, 105, 30, "Chocolate"},
-    {255, 127, 80, "Coral"},
-    {70, 130, 180, "Steel Blue"},
-    {0, 191, 255, "Deep Sky Blue"},
-    {60, 179, 113, "Medium Sea Green"},
-    {255, 250, 205, "Lemon Chiffon"},
-    {107, 142, 35, "Olive Drab"},
-    {255, 228, 181, "Moccasin"},
-    {255, 99, 71, "Tomato"},
-    {255, 239, 213, "Papaya Whip"},
-    {188, 143, 143, "Rosy Brown"},
-};
+ColorMapping* colorTable = NULL; // Dynamic array of map
+int colorCount = 0;
 
 // Prototype
 
@@ -169,6 +117,15 @@ void DrawCustomLine(HWND hwnd, int startX, int startY, int endX, int endY);
 void capture_pixel_data(FILE *file);
 void load_pixel_data(FILE *file);
 
+LRESULT CALLBACK ProgressDialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void UpdateProgressBar(int progress);
+void CloseProgressDialog();
+void ShowProgressDialog(HWND hwndParent);
+void CreateProgressBar(HWND hwndParent);
+void loadColorTableFromCSV(const char* filename);
+char* trim(char *str);
+
+
 /**
  * @brief Window procedure that handles messages for the main window.
  *
@@ -186,6 +143,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 HWND hwnd;
 HBRUSH colorBrush; // Default color is black
 HWND hBrushSlider;
+HWND hProgressDialog = NULL;
+HWND hProgressBar = NULL;
+HWND hProgressText = NULL;
 int currentColor[3] = {0,0,0};
 HWND hStatusBar;
 HCURSOR hCustomCursor;
@@ -253,7 +213,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CreateWindow(TEXT("BUTTON"), TEXT("Blue"), WS_VISIBLE | WS_CHILD, 10, 130, 80, 30, hwnd, (HMENU)ID_COLOR_BLUE, hInstance, NULL);
     CreateWindow(TEXT("STATIC"), TEXT("Custom RGB Value"), WS_VISIBLE | WS_CHILD | SS_CENTER, 10, 170, 130, 20, hwnd, (HMENU) ID_CUSTOM_RGB, hInstance, NULL);
     HWND hEdit = CreateWindowEx(0, TEXT("EDIT"), TEXT(""), WS_CHILD | WS_VISIBLE | WS_BORDER | SS_CENTER, 10, 200, 100, 20, hwnd, (HMENU)ID_COLOR_LABEL, hInstance, NULL);
-    CreateWindow(TEXT("BUTTON"), TEXT("CUSTOM COLOR"), WS_VISIBLE | WS_CHILD, 10, 230, 120, 30, hwnd, (HMENU)ID_CUSTOM_BUTTON_COLOR, hInstance, NULL);
+    CreateWindow(TEXT("BUTTON"), TEXT("CUSTOM COLOR"), WS_VISIBLE | WS_CHILD, 10, 230, 150, 30, hwnd, (HMENU)ID_CUSTOM_BUTTON_COLOR, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Eraser"), WS_VISIBLE | WS_CHILD, 100, 10, 80, 30, hwnd, (HMENU)ID_ERASER, hInstance, NULL);
     CreateWindow(TEXT("BUTTON"), TEXT("Toggle Grid"), WS_VISIBLE | WS_CHILD, 190, 10, 100, 30, hwnd, (HMENU)ID_GRID_TOGGLE, hInstance, NULL);
     hBrushSlider = CreateWindow(TRACKBAR_CLASS, NULL, WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS, 300, 10, 200, 30, hwnd, (HMENU)ID_BRUSH_SLIDER, hInstance, NULL);
@@ -279,6 +239,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int parts[] = {80, 230, 350, 520, -1};
     SendMessage(hStatusBar, SB_SETPARTS, sizeof(parts) / sizeof(parts[0]), (LPARAM)parts);
 
+    // Load colorTable data from CSV
+    loadColorTableFromCSV("colormap.csv");
+
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
@@ -288,6 +251,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    free(colorTable);
     DeleteObject(colorBrush);
     DestroyIcon(hIcon);
     DestroyCursor(hCustomCursor);
@@ -365,6 +329,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 const char* closestColorName = GetClosestColorName(CustomColor[0], CustomColor[1], CustomColor[2]);
                 SetWindowText(GetDlgItem(hwnd, ID_CUSTOM_BUTTON_COLOR), closestColorName);
+                if (useCustomColor) {
+                    SetColor(CustomColor[0],CustomColor[1],CustomColor[2]);
+                }
+
                 LogToFile("DEBUG: New RGB Value: %d, %d, %d\n", r,g,b);
             }
             LogToFile("DEBUG: Text value changed: %s\n", buffer);
@@ -400,7 +368,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 LogToFile("DEBUG: State of the custom button: %d\n", (useCustomColor == TRUE) ? 1 : 0);
                 break;
                 case ID_SAVE_BUTTON:
-                    MessageBox(NULL, "SAVING... Please wait.", "Alert", MB_OK | MB_ICONINFORMATION);
+                    DWORD start = GetTickCount();
                     LogToFile("DEBUG: SAVING...\n");
                     file = fopen("pixel_data.csv", "w"); 
                     if (file == NULL) {
@@ -409,9 +377,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     }
                     capture_pixel_data(file);
                     fclose(file);
+
+                    DWORD end = GetTickCount();
+                    DWORD duration = end - start;
                     LogToFile("DEBUG: SAVING DONE.\n");
+                    char durationStr[256];
+                    sprintf(durationStr, "Time taken for saving: %lu milliseconds\n", duration);
+                    LogToFile(durationStr);
                     break;
                 case ID_LOAD_BUTTON:
+                    start = GetTickCount();
                     LogToFile("DEBUG: CURRENT_LOADING\n");
                     file = fopen("pixel_data.csv", "r");
                     if (file == NULL) {
@@ -420,7 +395,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     }
                     load_pixel_data(file);
                     fclose(file);
+
+                    end = GetTickCount();
+                    duration = end - start;
+
                     LogToFile("DEBUG: LOADING FINISHED\n");
+                    durationStr[256];
+                    sprintf(durationStr, "Time taken for loading: %lu milliseconds\n", duration);
+                    LogToFile(durationStr);
                     break;
             case ID_ERASER:
                 eraseMode = !eraseMode;
@@ -549,10 +531,11 @@ void resetColorTextField() {
 }
 
 const char* GetClosestColorName(int r, int g, int b) {
-    const struct ColorMapping* closestMatch = NULL;
+    const ColorMapping* closestMatch = NULL;
     double minDistance = 1.79769e+308; // Maximum representable finite floating-point value
 
-    for (const struct ColorMapping* mapping = colorTable; mapping < colorTable + sizeof(colorTable) / sizeof(colorTable[0]); ++mapping) {
+    for (int i = 0; i < colorCount; ++i) {
+        const ColorMapping* mapping = &colorTable[i];
         double distance = sqrt(pow(mapping-> r - r, 2) + pow(mapping-> g - g, 2) + pow(mapping-> b - b, 2));
 
         if (distance < minDistance) {
@@ -563,6 +546,7 @@ const char* GetClosestColorName(int r, int g, int b) {
 
     return (closestMatch != NULL) ? closestMatch-> name : colorTable[0].name; // Returning the first color as a fallback
 }
+
 
 void UpdateStatusBarText() {
     char brushSizeText[256];
@@ -593,6 +577,7 @@ const char* GetCurrentModeText() {
 }
 
 void capture_pixel_data(FILE *file) {
+    ShowProgressDialog(hwnd); // Show the progress dialog
     HDC hdc = GetDC(hwnd); // Get device context of the window
     if (hdc == NULL) {
         return;
@@ -600,6 +585,10 @@ void capture_pixel_data(FILE *file) {
 
     RECT rect;
     GetClientRect(hwnd, &rect); // Get the dimensions of the window client area
+
+    int totalPixels = (rect.right - rect.left) * (rect.bottom - rect.top);
+    int pixelProcessed = 0;
+    const int updateInterval = totalPixels / 100;
 
     // Create a memory device context and a compatible bitmap
     HDC memDC = CreateCompatibleDC(hdc);
@@ -622,7 +611,7 @@ void capture_pixel_data(FILE *file) {
         DeleteDC(memDC);
         ReleaseDC(hwnd, hdc);
         return;
-    }
+    } 
 
     // Process pixel data
     for (int y = 0; y < rect.bottom - rect.top; y++) {
@@ -640,8 +629,14 @@ void capture_pixel_data(FILE *file) {
 
             // Write pixel information to the file
             fprintf(file, "%d,%d,%d,%d,%d\n", x, y, red, green, blue);
+            pixelProcessed++;
+            if (pixelProcessed % updateInterval == 0) {
+                int progress = (pixelProcessed * 100) / totalPixels;
+                UpdateProgressBar(progress);
+            }
         }
     }
+    CloseProgressDialog();
 
     // Clean up resources
     SelectObject(memDC, hOldBitmap);
@@ -666,8 +661,8 @@ void load_pixel_data(FILE *file) {
     while(fgets(buffer, buffer_size, file) != NULL) {
         int x, y, r, g, b;
         if (sscanf(buffer, "%d,%d,%d,%d,%d", &x, &y, &r, &g, &b) == 5) {
-            if (r != 255 && g != 255 && b != 255) {
-                SetPixel(hdc, x, y, RGB(r,b,g));
+            if (r != 255 || g != 255 || b != 255) {
+                SetPixel(hdc, x, y, RGB(r,g,b));
             }
         }
     }
@@ -686,4 +681,132 @@ void LogToFile(const char* format, ...) {
         va_end(args);
         fclose(debugFile);
     }
+}
+
+// Function to create and initialize the progress bar
+void CreateProgressBar(HWND hwndParent) {
+    INITCOMMONCONTROLSEX icex;
+    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+    icex.dwICC = ICC_PROGRESS_CLASS;
+    InitCommonControlsEx(&icex);
+
+    hProgressBar = CreateWindowEx(
+        0,
+        PROGRESS_CLASS,
+        NULL,
+        WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+        10, 10, 200, 20,
+        hwndParent,
+        NULL,
+        NULL,
+        NULL
+    );
+}
+
+void ShowProgressDialog(HWND hwndParent) {
+    // Create the progress dialog
+    hProgressDialog = CreateWindowEx(WS_EX_DLGMODALFRAME,
+                                     MAKEINTATOM(WC_DIALOG),
+                                     "Saving you're drawing...",
+                                     WS_CAPTION | WS_POPUP,
+                                     CW_USEDEFAULT, CW_USEDEFAULT,
+                                     300, 60,
+                                     hwndParent,
+                                     NULL,
+                                     NULL,
+                                     NULL);
+
+    // Check if the window was created successfully
+    if (hProgressDialog != NULL) {
+        // Desired position (x, y)
+        int x = SCREEN_WIDTH - (SCREEN_WIDTH / 2);
+        int y = SCREEN_HEIGHT - (SCREEN_HEIGHT / 2);
+        // Set the position
+        SetWindowPos(hProgressDialog, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+        // Create the progress bar
+        hProgressBar = CreateWindowEx(0,
+                                      PROGRESS_CLASS,
+                                      NULL,
+                                      WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+                                      5, 5, 280, 20,
+                                      hProgressDialog,
+                                      (HMENU)IDC_PROGRESS_BAR,
+                                      NULL,
+                                      NULL);
+
+        // Show the dialog
+        ShowWindow(hProgressDialog, SW_SHOW);
+    } else {
+        LogToFile("FAILURE: THE SAVE-WINDOWS COULDN'T BE CREATED AND IT RESULTED IN AN AUTOMATIC FAILURE.");
+    }
+}
+
+void CloseProgressDialog() {
+    if (hProgressDialog != NULL) {
+        DestroyWindow(hProgressDialog);
+        hProgressDialog = NULL;
+    }
+}
+
+void UpdateProgressBar(int progress) {
+    if (hProgressBar != NULL) {
+        SendMessage(hProgressBar, PBM_SETPOS, progress, 0);
+    }
+}
+
+LRESULT CALLBACK ProgressDialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CLOSE:
+            CloseProgressDialog();
+            break;
+        default:
+            return DefWindowProc(hwndDlg, uMsg, wParam, lParam);
+    }
+    return 0;
+}
+
+void loadColorTableFromCSV(const char* filename) {
+    LogToFile("\nDEBUG: STARTING THE LOADING OF COLORS\n");
+    FILE* colorMapFile = fopen(filename, "r"); // Open in read-only
+    if (colorMapFile == NULL) {
+        LogToFile("ERROR: Failed to open the file.");
+        return;
+    }   
+
+    char line[256];
+
+    while(fgets(line, sizeof(line), colorMapFile)) {
+        ColorMapping color;
+        char* token = strtok(line, ",");
+        if (token == NULL) continue;
+            color.r = atoi(token);
+
+        token = strtok(NULL, ",");
+        if (token == NULL) continue;
+            color.g = atoi(token);
+
+        token = strtok(NULL, ",");
+        if (token == NULL) continue;
+            color.b = atoi(token);
+
+        token = strtok(NULL, "\n");
+        if (token == NULL) continue;
+            color.name = strdup(trim(token));
+        
+        colorTable = realloc(colorTable, sizeof(ColorMapping) * (colorCount + 1));
+        colorTable[colorCount++] = color;
+    }
+    fclose(colorMapFile);
+}
+
+char* trim(char *str) { // My Own implementation of the TRIM() function
+    while(isspace((unsigned char)*str)) str++;
+    if (*str == 0) return str;
+
+    char *end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+    end[1] = '\0';
+
+    return str;
 }
