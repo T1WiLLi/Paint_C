@@ -1,0 +1,25 @@
+Welcome to the How To Use section of the application. Below, you will find instructions on how to use various features:
+
+1. Drawing:
+
+To draw, simply hold down left click, drag and start drawing !
+
+2. Selecting Colors:
+
+To select colors, you can either click on one of the nine colors buttons or use the RGB Selector, which you can learn more about below.
+
+3. Saving and Loading:
+
+In order to save / load, the program creates a CSV files that contain each pixel data, for now, you cannot retrieve that file, but I might make it possible in later version.
+
+4. RGB Selector:
+
+To use the RGB Selector you must first press the corresponding button, then you can enter the color you wish to use.
+
+5. TEXT Mode
+
+The text mode is a proof-of-concept, so it lacks some feature, for instance, you can only write 1 text at a time, and only 1 will be saved.
+
+Thanks you for using Paint-C, if you have any question that haven't been already answer, please refer to the online documentation at :
+
+https://github.com/T1WiLLi/Paint_C/blob/main/README.md
